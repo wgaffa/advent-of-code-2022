@@ -3,6 +3,8 @@ module Main where
 import Data.Bifunctor (bimap, first, second)
 import Data.List
 import Data.Char
+import Data.Foldable
+import qualified Data.IntMap as IM
 import Control.Monad.State
 import Data.Functor.Identity
 
@@ -13,56 +15,42 @@ main = do
   input <- input 8
   Aoc.run input 1798 part1
 
-  Aoc.run input 100464 part2 -- too low
+  print $ part2 input
+  Aoc.run input 259308 part2
   where
+    defState = (IM.empty, 0)
     part1 = length . filter id . concat . matrixManipulation compareLeft (const True) (zipWith (||)) . lines
-    part2 = maximum . concat . matrixManipulation leftView (const (0, minBound :: Int, 1)) (zipWith (*)) . lines
+    part2 = maximum . concat . matrixManipulation leftView defState (zipWith (*)) . lines
 
 type ComparisonState a b = State (b -> a) a
+type RangeMap = (IM.IntMap Int, Int)
 
-matrixManipulation :: (Int -> StateT p Identity a) -> p -> ([a] -> [a] -> [a]) -> [String] -> [[a]]
+matrixManipulation :: (Int -> StateT s Identity a) -> s -> ([a] -> [a] -> [a]) -> [String] -> [[a]]
 matrixManipulation p defState zipper ls = map (uncurry zipper) $ zip horizontal vertical
   where
-    state f ff = map (parseLine f) . ff $ ls
-    left = run $ state p id
-    right = map reverse . run . map reverse $ state p id
-    top = transpose . run $ state p transpose
-    bottom = transpose . map reverse . run . map reverse $ state p transpose
+    view f = map (parseLine f) $ ls
+    left = run $ view p
+    right = map reverse . run . map reverse $ view p 
+    top = transpose . run . transpose $ view p
+    bottom = transpose . map reverse . run . map reverse . transpose $ view p
     horizontal = map (uncurry zipper) $ zip left right
     vertical = map (uncurry zipper) $ zip top bottom
     run = map (\x -> fst . runIdentity $ runStateT (sequence x) defState)
 
--- Some intermediate test functions for ghci
-runner :: [[StateT (Int -> (Int, Int, Int)) Identity a]] -> [[a]]
-runner = map (\x -> fst . runIdentity $ runStateT (sequence x) (const (0, minBound :: Int, 1)))
+findHighestNearest :: Int -> IM.IntMap Int -> Int
+findHighestNearest i = maxElem . IM.elems . IM.filterWithKey (\k _ -> k >= i)
+  where
+    maxElem = foldr' (\x y -> if x > y then x else y) 0
 
-left' :: [[StateT (Int -> (Int, Int, Int)) Identity a]] -> [[a]]
-left' = runner
-
-right' :: [[StateT (Int -> (Int, Int, Int)) Identity a]] -> [[a]]
-right' = map reverse . runner . map reverse
-
-top' :: [[StateT (Int -> (Int, Int, Int)) Identity a]] -> [[a]]
-top' = transpose . runner
-
-bottom' :: [[StateT (Int -> (Int, Int, Int)) Identity a]] -> [[a]]
-bottom' = transpose . map reverse . runner . map reverse
-
-horizontal' x y = map (uncurry (zipWith (*))) $ zip x y
-vertical' x y =  map (uncurry (zipWith (*))) $ zip x y
-
-both' x y = map (uncurry (zipWith (*))) $ zip x y
--- end of crap
-
-leftView :: Int -> StateT (Int -> (Int, Int, Int)) Identity Int
+leftView :: Int -> StateT RangeMap Identity Int
 leftView x = do
-  f <- get
-  let (add, max, counter) = f x
-  put $ \a -> case (a > max, a > x) of
-    (True, _) -> (counter, a, counter + 1)
-    (False, True) -> (add + 1, max, counter + 1)
-    (_, _) -> (1, max, counter + 1)
-  pure add
+  (treeIndexes, index) <- get
+  let highest = findHighestNearest x treeIndexes
+  let newTree = IM.insert x index treeIndexes
+  let range = index - highest
+
+  put (newTree, index + 1)
+  pure range
 
 compareLeft :: Int -> ComparisonState Bool Int
 compareLeft x = do
