@@ -12,7 +12,7 @@ main :: IO ()
 main = do
   content <- lines <$> input 9
   let moves = parse content
-  -- print $ part1 moves
+  print $ part1 moves
   print $ part2 moves
   where
     part1 f = length . nub . scanl addPos (0, 0) $ evalState (state headMoves f) Overlapped
@@ -68,8 +68,6 @@ tailMove :: RelativePosition -> Direction -> (TailMovement, RelativePosition)
 tailMove Overlapped b = (TailStill, Relative b)
 tailMove (Relative a) b
   | even $ fromEnum b = if a `elem` (compassU $ compassOpposite b)
-                          -- first of compassU and last, we move in their (+1) and (-1) direction
-                          -- otherwise we move to the middle of compassU direction
                           then (TailMove . moveDiagLeft $ oppU b , dleft $ oppU b)
                           else (TailStill, diagRelLeft . side . compassOpposite $ b)
   | a `elem` compassSide = (TailMove a, Relative b)
@@ -105,7 +103,7 @@ headMoves2 dir = do
   rel <- get
 
   let hd = head rel
-  let firstMove = tailMove hd dir --(TailMove dir, snd $ tailMove hd dir)
+  let firstMove = tailMove hd dir
   let snake = scanl (\b a -> bwah (fst b) a) firstMove (tail rel)
 
   put . map snd $ snake
@@ -115,11 +113,6 @@ headMoves2 dir = do
     bwah :: TailMovement -> RelativePosition -> (TailMovement, RelativePosition)
     bwah (TailMove b) a = tailMove a b
     bwah TailStill a = (TailStill, a)
-
-  -- let (tail, newRel) = tailMove rel dir
-  -- put newRel
-
-  -- pure tail
 
 parse :: [String] -> [Direction]
 parse = concatMap (uncurry movement . bimap direction (read . drop 1) . break isSpace)
